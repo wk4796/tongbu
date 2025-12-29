@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # ==========================================
-#  [tongbu] Rclone 动态多路同步工具 (完美体验版)
+#  [tongbu] Rclone 动态多路同步工具 (健壮版)
 #  功能：增量比对 -> 分批下载 -> 多路分发 -> 自动后台
-#  特性：支持方向键修改 | 自动列出网盘 | 支持挂载路径
+#  修复：网盘列表为空时的显示逻辑
 # ==========================================
 
 # --- 颜色定义 ---
@@ -24,7 +24,6 @@ check_environment() {
         echo -e "${CYAN}检测到未在 tmux 后台运行。${NC}"
         echo -e "${YELLOW}为了防止 SSH 断开导致数据传输中断，建议使用后台模式。${NC}"
         echo -n "是否自动创建并进入安全后台会话? [y/n]: "
-        # 使用 -e 支持方向键
         read -e -r choice
         if [[ "$choice" =~ ^[Yy]$ ]]; then
             tmux new-session -s tongbu_session "bash $0 inside_tmux"
@@ -33,21 +32,40 @@ check_environment() {
     fi
 }
 
-# --- 2. 动态配置向导 (双模校验 + 体验优化) ---
+# --- 2. 动态配置向导 (防空逻辑增强) ---
 get_user_input() {
     clear
     echo -e "${GREEN}=== Rclone 多路同步工具 (tongbu) ===${NC}"
     
-    # [优化] 自动列出网盘供参考
-    echo -e "\n${CYAN}当前可用网盘列表 (Rclone Remotes):${NC}"
+    echo -e "\n${CYAN}当前可用网盘列表 (复制名称+冒号):${NC}"
     echo "---------------------------------"
-    rclone listremotes
+    
+    # [核心修改] 获取网盘列表并判断是否为空
+    REMOTES=$(rclone listremotes)
+    
+    if [ -z "$REMOTES" ]; then
+        # 情况A: 没有网盘
+        echo -e "${RED}(列表为空) ${YELLOW}未检测到 Rclone 网盘配置。${NC}"
+        echo -e "提示: 如果需要连接网盘，请先运行 'rclone config' 进行配置。"
+        echo -e "      (如果您仅用于本地目录间同步，请忽略此提示)"
+        # 设置一个通用的示例默认值，防止界面崩坏
+        FIRST_REMOTE="your_remote:"
+    else
+        # 情况B: 有网盘
+        echo "$REMOTES"
+        # 提取第一个网盘名作为动态示例
+        FIRST_REMOTE=$(echo "$REMOTES" | head -n 1 | tr -d '[:space:]')
+    fi
     echo "---------------------------------"
 
-    # --- 获取源路径 (支持 网盘 或 本地目录) ---
-    echo -e "\n${YELLOW}[1/4] 请输入源路径 (支持 'onedrive:/src' 或挂载路径 '/mnt/openlist'):${NC}"
+    # --- 获取源路径 ---
+    echo -e "\n${YELLOW}[1/4] 请输入源路径:${NC}"
+    echo -e "  • 同步整个网盘，请输入: ${GREEN}${FIRST_REMOTE}${NC}"
+    echo -e "  • 同步网盘内文件夹，请输入: ${GREEN}${FIRST_REMOTE}/movies${NC}"
+    echo -e "  • 同步挂载/本地目录，请输入: ${GREEN}/mnt/openlist/data${NC}"
+    echo -e "${CYAN}请输入:${NC}"
+    
     while true; do
-        # [优化] read -e 允许方向键修改
         read -e -r SOURCE
         
         # 1. 空值检查
@@ -56,24 +74,31 @@ get_user_input() {
             continue
         fi
         
-        # 2. 检查是否为本地目录 (包括挂载点)
+        # 2. 检查是否为本地目录
         if [ -d "$SOURCE" ]; then
             echo -e "${GREEN}√ 识别为本地/挂载目录: $SOURCE${NC}"
             break
         fi
 
-        # 3. 检查是否为 Rclone 网盘 (提取冒号前的部分进行比对)
+        # 3. 检查是否为 Rclone 网盘
         if [[ "$SOURCE" == *":"* ]]; then
             REMOTE_NAME=$(echo "$SOURCE" | cut -d: -f1):
-            if rclone listremotes | grep -q "^$REMOTE_NAME$"; then
+            # 如果列表为空，grep 会失败，所以要先判断 REMOTES 是否有内容
+            if [ -n "$REMOTES" ] && echo "$REMOTES" | grep -q "^$REMOTE_NAME$"; then
                 echo -e "${GREEN}√ 识别为 Rclone 网盘: $REMOTE_NAME${NC}"
                 break
             else
+                # 即使列表为空，这里也提示找不到，因为确实没配置
                 echo -e "${RED}错误: 找不到名为 '$REMOTE_NAME' 的网盘。${NC}"
+                if [ -z "$REMOTES" ]; then
+                     echo -e "原因: 您当前没有配置任何网盘。"
+                else
+                     echo -e "请检查上方列表，确保拼写完全一致(包含冒号)。"
+                fi
             fi
         else
             echo -e "${RED}错误: 路径无效。${NC}"
-            echo -e "请输入有效的本地目录路径，或正确的 Rclone 网盘路径(包含冒号)。"
+            echo -e "如果是网盘路径，请务必包含冒号 (例如 ${FIRST_REMOTE}/path)。"
             echo -e "${YELLOW}请重新输入:${NC}"
         fi
     done
@@ -89,14 +114,14 @@ get_user_input() {
         fi
     done
 
-    # --- 获取目标路径 (同样支持双模) ---
+    # --- 获取目标路径 ---
     DEST_ARRAY=()
     for ((i=1; i<=TARGET_COUNT; i++)); do
-        echo -e "${CYAN}  -> 请输入第 $i 个目标网盘的路径:${NC}"
+        echo -e "\n${CYAN}  -> 请输入第 $i 个目标网盘的路径:${NC}"
+        echo -e "     (格式示例: ${GREEN}${FIRST_REMOTE}/backup${NC})"
         while true; do
             read -e -r temp_dest
             if [ -n "$temp_dest" ]; then
-                # 校验逻辑同上：先查本地目录，再查网盘
                 if [ -d "$temp_dest" ]; then
                      DEST_ARRAY+=("$temp_dest")
                      echo -e "${GREEN}√ 目标已确认为目录。${NC}"
@@ -104,7 +129,7 @@ get_user_input() {
                 else
                     if [[ "$temp_dest" == *":"* ]]; then
                         DEST_NAME=$(echo "$temp_dest" | cut -d: -f1):
-                        if rclone listremotes | grep -q "^$DEST_NAME$"; then
+                        if [ -n "$REMOTES" ] && echo "$REMOTES" | grep -q "^$DEST_NAME$"; then
                             DEST_ARRAY+=("$temp_dest")
                             echo -e "${GREEN}√ 目标已确认为网盘。${NC}"
                             break
@@ -112,7 +137,7 @@ get_user_input() {
                              echo -e "${RED}错误: 网盘 '$DEST_NAME' 不存在。${NC}"
                         fi
                     else
-                         echo -e "${RED}错误: 路径不存在，请检查拼写。${NC}"
+                         echo -e "${RED}错误: 路径不存在或格式错误(缺少冒号)。${NC}"
                     fi
                 fi
             fi
@@ -176,7 +201,6 @@ run_sync() {
         # A. 下载到本地
         for file in "${batch[@]}"; do
             echo -e "  [读取] $file"
-            # 如果源是本地目录，copyto 会自动处理
             rclone copyto "$SOURCE/$file" "$LOCAL_DIR/$file"
         done
 
