@@ -35,19 +35,20 @@ tmux attach -t tongbu_session
 tmux kill-session -t tongbu_session
 ```
 运行后，后台那个叫 `tongbu_session` 的任务就会彻底消失。
+
 ---
 
 ### 情况 3：核弹级清理 (强制停止所有任务)
 如果你感觉系统卡住了，或者不确定有没有残留的 Rclone 进程在偷偷跑，可以使用“核弹”命令清理战场：
+强制杀死所有名为 rclone 的进程
 ```
-# 强制杀死所有名为 rclone 的进程
 pkill -9 rclone
 ```
 或者：
-```bash
-# 强制杀死所有 tmux 会话（慎用，会关闭所有后台窗口）
+强制杀死所有 tmux 会话（慎用，会关闭所有后台窗口）
+```
 pkill -9 tmux
-
+```
 ---
 ### 总结
 
