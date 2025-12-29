@@ -47,3 +47,9 @@ pkill -9 rclone
 ```bash
 # 强制杀死所有 tmux 会话（慎用，会关闭所有后台窗口）
 pkill -9 tmux
+
+---
+### 总结
+
+* **温柔停止：** 进窗口按 `Ctrl + C`。
+* **最快停止：** 在外面运行 `tmux kill-session -t tongbu_session`。
