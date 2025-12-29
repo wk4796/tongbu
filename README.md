@@ -91,8 +91,9 @@ pkill -9 tmux
 ### 第一步：启动脚本
 建议在 `tmux` 或 `screen` 后台运行，防止网络断开导致任务中断。
 ```
-bash tongbu.sh
+source <(curl -sL https://raw.githubusercontent.com/wk4796/tongbu/main/install_tongbu.sh)
 ```
+后续输入`tongbu`即可进入脚本
 
 ### 第二步：配置源路径 (From)
 脚本会询问文件从哪里来。
