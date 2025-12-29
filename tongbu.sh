@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ==========================================
-#  [tongbu] Rclone 动态多路同步工具 (完美交互版)
+#  [tongbu] Rclone 动态多路同步工具 (最终修正版)
 #  功能：增量比对 -> 分批下载 -> 多路分发 -> 自动后台
 #  特性：支持方向键 | 自动列表 | 智能双模提示 | 默认回车Y
-#  修复：目标路径提示语歧义，明确支持挂载点
+#  修复：优化界面用词 (接收文件 -> 目标路径)
 # ==========================================
 
 # --- 颜色定义 ---
@@ -53,8 +53,8 @@ get_user_input() {
     fi
     echo "---------------------------------"
 
-    # --- 获取源路径 (清晰的多行提示) ---
-    echo -e "\n${YELLOW}[1/4] 请输入源文件的路径:${NC}"
+    # --- 获取源路径 ---
+    echo -e "\n${YELLOW}[1/4] 请输入源路径 (文件从哪来?):${NC}"
     echo -e "  • 方式A (网盘路径): ${GREEN}${FIRST_REMOTE}/movies${NC}"
     echo -e "  • 方式B (挂载路径): ${GREEN}/mnt/openlist/data${NC}"
     echo -e "${CYAN}请输入:${NC}"
@@ -96,10 +96,11 @@ get_user_input() {
         fi
     done
 
-    # --- 获取目标路径 (这里也改为清晰的多行提示) ---
+    # --- 获取目标路径 ---
     DEST_ARRAY=()
     for ((i=1; i<=TARGET_COUNT; i++)); do
-        echo -e "\n${CYAN}  -> 请输入第 $i 个接收文件的位置:${NC}"
+        # [修改点] 这里的提示语更加精准
+        echo -e "\n${CYAN}  -> 请输入第 $i 个目标路径 (文件存到哪?):${NC}"
         echo -e "     • 填网盘路径: ${GREEN}${FIRST_REMOTE}/backup${NC}"
         echo -e "     • 填挂载路径: ${GREEN}/mnt/openlist/folder2${NC}"
         echo -e "     ${CYAN}请输入:${NC}"
