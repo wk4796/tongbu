@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ==========================================
-#  [tongbu] Rclone 动态多路同步工具 (最终修正版)
+#  [tongbu] Rclone 动态多路同步工具 (完美交互版)
 #  功能：增量比对 -> 分批下载 -> 多路分发 -> 自动后台
-#  特性：支持方向键 | 自动列表 | 智能提示 | 默认回车Y
-#  修复：明确提示支持本地/挂载路径
+#  特性：支持方向键 | 自动列表 | 智能双模提示 | 默认回车Y
+#  修复：目标路径提示语歧义，明确支持挂载点
 # ==========================================
 
 # --- 颜色定义 ---
@@ -53,11 +53,10 @@ get_user_input() {
     fi
     echo "---------------------------------"
 
-    # --- 获取源路径 ---
-    echo -e "\n${YELLOW}[1/4] 请输入源路径:${NC}"
-    echo -e "  • 同步整个网盘，请输入: ${GREEN}${FIRST_REMOTE}${NC}"
-    echo -e "  • 同步网盘内文件夹，请输入: ${GREEN}${FIRST_REMOTE}/movies${NC}"
-    echo -e "  • 同步挂载/本地目录，请输入: ${GREEN}/mnt/openlist/data${NC}"
+    # --- 获取源路径 (清晰的多行提示) ---
+    echo -e "\n${YELLOW}[1/4] 请输入源文件的路径:${NC}"
+    echo -e "  • 方式A (网盘路径): ${GREEN}${FIRST_REMOTE}/movies${NC}"
+    echo -e "  • 方式B (挂载路径): ${GREEN}/mnt/openlist/data${NC}"
     echo -e "${CYAN}请输入:${NC}"
     
     while true; do
@@ -87,7 +86,7 @@ get_user_input() {
     done
 
     # --- 获取目标数量 ---
-    echo -e "\n${YELLOW}[2/4] 请问有几个目标网盘要同步? (输入数字):${NC}"
+    echo -e "\n${YELLOW}[2/4] 请问有几个目标位置要同步? (输入数字):${NC}"
     while true; do
         read -e -r TARGET_COUNT
         if [[ "$TARGET_COUNT" =~ ^[0-9]+$ ]] && [ "$TARGET_COUNT" -ge 1 ]; then
@@ -97,12 +96,14 @@ get_user_input() {
         fi
     done
 
-    # --- 获取目标路径 ---
+    # --- 获取目标路径 (这里也改为清晰的多行提示) ---
     DEST_ARRAY=()
     for ((i=1; i<=TARGET_COUNT; i++)); do
-        echo -e "\n${CYAN}  -> 请输入第 $i 个目标网盘的路径:${NC}"
-        # [修改点] 这里的提示语增加了挂载路径的示例
-        echo -e "     (示例: ${GREEN}${FIRST_REMOTE}/backup${NC} 或 ${GREEN}/mnt/openlist${NC})"
+        echo -e "\n${CYAN}  -> 请输入第 $i 个接收文件的位置:${NC}"
+        echo -e "     • 填网盘路径: ${GREEN}${FIRST_REMOTE}/backup${NC}"
+        echo -e "     • 填挂载路径: ${GREEN}/mnt/openlist/folder2${NC}"
+        echo -e "     ${CYAN}请输入:${NC}"
+        
         while true; do
             read -e -r temp_dest
             if [ -n "$temp_dest" ]; then
