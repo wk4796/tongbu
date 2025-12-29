@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # ==========================================
-#  [tongbu] Rclone 动态多路同步工具 (体验优化版)
+#  [tongbu] Rclone 动态多路同步工具 (最终修正版)
 #  功能：增量比对 -> 分批下载 -> 多路分发 -> 自动后台
-#  特性：支持方向键 | 自动列出网盘 | 智能示例 | 默认回车选Y
+#  特性：支持方向键 | 自动列表 | 智能提示 | 默认回车Y
+#  修复：明确提示支持本地/挂载路径
 # ==========================================
 
 # --- 颜色定义 ---
@@ -23,12 +24,9 @@ check_environment() {
     if [ -z "$TMUX" ]; then
         echo -e "${CYAN}检测到未在 tmux 后台运行。${NC}"
         echo -e "${YELLOW}为了防止 SSH 断开导致数据传输中断，建议使用后台模式。${NC}"
-        # [优化] 提示改为 [Y/n] 表示默认 Y
         echo -n "是否自动创建并进入安全后台会话? [Y/n]: "
         read -e -r choice
-        # [逻辑] 如果变量为空，赋值为 y
         choice=${choice:-y}
-        
         if [[ "$choice" =~ ^[Yy]$ ]]; then
             tmux new-session -s tongbu_session "bash $0 inside_tmux"
             exit 0
@@ -36,7 +34,7 @@ check_environment() {
     fi
 }
 
-# --- 2. 动态配置向导 (防空逻辑增强) ---
+# --- 2. 动态配置向导 ---
 get_user_input() {
     clear
     echo -e "${GREEN}=== Rclone 多路同步工具 (tongbu) ===${NC}"
@@ -44,9 +42,7 @@ get_user_input() {
     echo -e "\n${CYAN}当前可用网盘列表 (复制名称+冒号):${NC}"
     echo "---------------------------------"
     
-    # 获取网盘列表并判断
     REMOTES=$(rclone listremotes)
-    
     if [ -z "$REMOTES" ]; then
         echo -e "${RED}(列表为空) ${YELLOW}未检测到 Rclone 网盘配置。${NC}"
         echo -e "提示: 如果需要连接网盘，请先运行 'rclone config' 进行配置。"
@@ -70,6 +66,7 @@ get_user_input() {
             echo -e "${RED}输入不能为空，请重新输入:${NC}"
             continue
         fi
+        # 优先检测目录/挂载点
         if [ -d "$SOURCE" ]; then
             echo -e "${GREEN}√ 识别为本地/挂载目录: $SOURCE${NC}"
             break
@@ -85,7 +82,7 @@ get_user_input() {
             fi
         else
             echo -e "${RED}错误: 路径无效。${NC}"
-            echo -e "如果是网盘路径，请务必包含冒号 (例如 ${FIRST_REMOTE}/path)。"
+            echo -e "如果是网盘路径，请务必包含冒号；如果是挂载路径，请确保路径存在。"
         fi
     done
 
@@ -104,13 +101,15 @@ get_user_input() {
     DEST_ARRAY=()
     for ((i=1; i<=TARGET_COUNT; i++)); do
         echo -e "\n${CYAN}  -> 请输入第 $i 个目标网盘的路径:${NC}"
-        echo -e "     (格式示例: ${GREEN}${FIRST_REMOTE}/backup${NC})"
+        # [修改点] 这里的提示语增加了挂载路径的示例
+        echo -e "     (示例: ${GREEN}${FIRST_REMOTE}/backup${NC} 或 ${GREEN}/mnt/openlist${NC})"
         while true; do
             read -e -r temp_dest
             if [ -n "$temp_dest" ]; then
+                # 优先检测目录/挂载点
                 if [ -d "$temp_dest" ]; then
                      DEST_ARRAY+=("$temp_dest")
-                     echo -e "${GREEN}√ 目标已确认为目录。${NC}"
+                     echo -e "${GREEN}√ 目标已确认为本地/挂载目录。${NC}"
                      break
                 else
                     if [[ "$temp_dest" == *":"* ]]; then
@@ -153,12 +152,9 @@ confirm_config() {
     echo -e "本地缓存: $LOCAL_DIR"
     echo -e "批次大小: $BATCH_SIZE"
     echo -e "------------------------"
-    # [优化] 提示改为 [Y/n] 表示默认 Y
     echo -n "确认开始吗? [Y/n]: "
     read -e -r confirm
-    # [逻辑] 如果变量为空，赋值为 y
     confirm=${confirm:-y}
-    
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then exit 0; fi
 }
 
@@ -168,6 +164,7 @@ run_sync() {
     TEMP_LIST="$LOCAL_DIR/temp_file_list.txt"
 
     echo -e "\n${CYAN}正在获取源文件列表...${NC}"
+    # lsf 支持本地路径和网盘路径
     if ! rclone lsf -R "$SOURCE" --files-only > "$TEMP_LIST"; then
         echo -e "${RED}获取文件列表失败，请检查是否有权限读取该目录。${NC}"
         exit 1
@@ -184,14 +181,17 @@ run_sync() {
     for ((i=0; i<total_files; i+=BATCH_SIZE)); do
         batch=("${all_files[@]:i:BATCH_SIZE}")
         echo -e "\n${YELLOW}>>> 正在处理批次: $((i/BATCH_SIZE + 1))${NC}"
+        # A. 下载
         for file in "${batch[@]}"; do
             echo -e "  [读取] $file"
             rclone copyto "$SOURCE/$file" "$LOCAL_DIR/$file"
         done
+        # B. 分发
         for dest in "${DEST_ARRAY[@]}"; do
             echo -e "  [分发] -> $dest"
             rclone copy "$LOCAL_DIR" "$dest"
         done
+        # C. 清理
         echo -e "  [清理] 删除本地缓存..."
         if [[ "$LOCAL_DIR" != "/" ]]; then rm -rf "${LOCAL_DIR:?}"/*; fi
     done
