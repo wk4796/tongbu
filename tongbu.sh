@@ -21,7 +21,8 @@ check_environment() {
     # 自动进入 tmux 后台
     if [ -z "$TMUX" ]; then
         echo -e "${CYAN}检测到未在 tmux 后台运行。${NC}"
-        echo -e "${YELLOW}为了防止 SSH 断开导致 1TB 数据传输中断，建议使用后台模式。${NC}"
+        # --- 修改点：去掉了 1TB 字样 ---
+        echo -e "${YELLOW}为了防止 SSH 断开导致数据传输中断，建议使用后台模式。${NC}"
         echo -n "是否自动创建并进入安全后台会话? [y/n]: "
         read -r choice
         if [[ "$choice" =~ ^[Yy]$ ]]; then
